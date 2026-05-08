@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Танк і Ящики</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        canvas {
+            background-color: #7cb342; /* Колір трави */
+            background-image: radial-gradient(#689f38 1px, transparent 1px);
+            background-size: 20px 20px;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+    </style>
+</head>
+<body class="bg-slate-200 min-h-screen flex flex-col items-center justify-center font-sans text-slate-800 p-4">
+
+    <div class="bg-white p-6 rounded-2xl shadow-xl flex flex-col items-center max-w-3xl w-full">
+        <h1 class="text-3xl font-bold mb-2 text-green-700">Танкова місія</h1>
+        
+        <div class="flex justify-between w-full max-w-[600px] mb-4 px-2">
+            <p class="text-lg font-semibold text-slate-600">Зібрано ящиків: <span id="score" class="text-indigo-600">0</span> / <span id="total-boxes">0</span></p>
+            <p class="text-sm text-slate-500 my-auto">Керування: Стрілочки або W A S D</p>
+        </div>
+
+        <!-- Ігрове поле -->
+        <canvas id="gameCanvas" width="600" height="400" class="rounded-lg border-4 border-slate-700 mb-6 w-full max-w-[600px]"></canvas>
+
+        <button id="restart-btn" class="px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg shadow transition-colors duration-200">
+            Згенерувати нову мапу
+        </button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const totalBoxesElement = document.getElementById('total-boxes');
+        const restartBtn = document.getElementById('restart-btn');
+
+        // Налаштування гри
+        const GAME_WIDTH = canvas.width;
+        const GAME_HEIGHT = canvas.height;
+        let score = 0;
+        let totalBoxes = 15;
+
+        // Завантаження картинки танка за посиланням
+        const tankImg = new Image();
+        
+        // ВСТАВТЕ ВАШЕ ПОСИЛАННЯ ТУТ МІЖ КАВИЧКАМИ:
+        tankImg.src = 'tank.png'; 
+
+        // Завантаження картинки ящика за посиланням
+        const boxImg = new Image();
+        // ВСТАВТЕ ПОСИЛАННЯ НА ВАШ ЯЩИК ТУТ МІЖ КАВИЧКАМИ:
+        boxImg.src = 'chest.png'; 
+
+        // Об'єкт танка
+        const tank = {
+            x: GAME_WIDTH / 2,
+            y: GAME_HEIGHT / 2,
+            width: 50,  // Ви можете змінити розмір під вашу картинку
+            height: 50,
+            angle: 0, // Кут повороту в радіанах
+            speed: 0,
+            maxSpeed: 3,
+            rotationSpeed: 0.06
+        };
+
+        // Масив ящиків
+        let boxes = [];
+
+        // Відстеження натиснутих клавіш
+        const keys = {
+            ArrowUp: false,
+            ArrowDown: false,
+            ArrowLeft: false,
+            ArrowRight: false,
+            w: false,
+            s: false,
+            a: false,
+            d: false
+        };
+
+        // Обробники подій клавіатури
+        window.addEventListener('keydown', (e) => {
+            if (keys.hasOwnProperty(e.key)) {
+                keys[e.key] = true;
+                e.preventDefault(); // Запобігаємо прокрутці сторінки стрілочками
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (keys.hasOwnProperty(e.key)) {
+                keys[e.key] = false;
+            }
+        });
+
+        // Генерація мапи (розстановка ящиків та танка)
+        function generateMap() {
+            score = 0;
+            scoreElement.innerText = score;
+            totalBoxesElement.innerText = totalBoxes;
+            boxes = [];
+
+            // Повертаємо танк в центр
+            tank.x = GAME_WIDTH / 2;
+            tank.y = GAME_HEIGHT / 2;
+            tank.angle = -Math.PI / 2; // Дивиться вгору
+
+            // Генеруємо ящики
+            for (let i = 0; i < totalBoxes; i++) {
+                let boxX, boxY;
+                let isTooClose;
+                
+                // Переконуємось, що ящик не з'явиться прямо на танку
+                do {
+                    boxX = Math.random() * (GAME_WIDTH - 40) + 20;
+                    boxY = Math.random() * (GAME_HEIGHT - 40) + 20;
+                    
+                    const distToTank = Math.hypot(boxX - tank.x, boxY - tank.y);
+                    isTooClose = distToTank < 80;
+                } while (isTooClose);
+
+                boxes.push({
+                    x: boxX,
+                    y: boxY,
+                    size: 30, // Збільшили розмір для кращого відображення картинки
+                    collected: false
+                });
+            }
+        }
+
+        // Оновлення логіки гри
+        function update() {
+            // Поворот танка
+            if (keys.ArrowLeft || keys.a) {
+                tank.angle -= tank.rotationSpeed;
+            }
+            if (keys.ArrowRight || keys.d) {
+                tank.angle += tank.rotationSpeed;
+            }
+
+            // Рух вперед/назад
+            if (keys.ArrowUp || keys.w) {
+                tank.speed = tank.maxSpeed;
+            } else if (keys.ArrowDown || keys.s) {
+                tank.speed = -tank.maxSpeed / 1.5; // Задній хід повільніший
+            } else {
+                tank.speed = 0;
+            }
+
+            // Обчислення нової позиції за допомогою тригонометрії
+            const newX = tank.x + Math.cos(tank.angle) * tank.speed;
+            const newY = tank.y + Math.sin(tank.angle) * tank.speed;
+
+            // Перевірка зіткнення з межами екрану
+            if (newX > 20 && newX < GAME_WIDTH - 20) tank.x = newX;
+            if (newY > 20 && newY < GAME_HEIGHT - 20) tank.y = newY;
+
+            // Збір ящиків
+            boxes.forEach(box => {
+                if (!box.collected) {
+                    // Проста перевірка відстані між центрами
+                    const dist = Math.hypot(tank.x - box.x, tank.y - box.y);
+                    if (dist < 30) { // Радіус збору
+                        box.collected = true;
+                        score++;
+                        scoreElement.innerText = score;
+                    }
+                }
+            });
+        }
+
+        // Малювання гри
+        function draw() {
+            // Очищення екрану
+            ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+            // Малювання ящиків
+            boxes.forEach(box => {
+                if (!box.collected) {
+                    ctx.save();
+                    ctx.translate(box.x, box.y);
+                    
+                    // Малюємо картинку ящика
+                    ctx.drawImage(boxImg, -box.size/2, -box.size/2, box.size, box.size);
+                    
+                    ctx.restore();
+                }
+            });
+
+            // Малювання танка
+            ctx.save();
+            ctx.translate(tank.x, tank.y);
+            ctx.rotate(tank.angle);
+
+            // Малюємо красивий спрайт танка
+            ctx.drawImage(tankImg, -tank.width / 2, -tank.height / 2, tank.width, tank.height);
+
+            ctx.restore();
+            
+            // Якщо всі ящики зібрані
+            if (score === totalBoxes) {
+                ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+                ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+                ctx.fillStyle = "white";
+                ctx.font = "bold 40px sans-serif";
+                ctx.textAlign = "center";
+                ctx.fillText("Місія виконана!", GAME_WIDTH/2, GAME_HEIGHT/2);
+            }
+        }
+
+        // Головний ігровий цикл
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Запуск
+        restartBtn.addEventListener('click', generateMap);
+        
+        // Ініціалізація та старт
+        generateMap();
+        requestAnimationFrame(gameLoop);
+
+    </script>
+</body>
+</html>
